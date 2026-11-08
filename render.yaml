@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: avcruopps
+    runtime: static
+    buildCommand: echo "AVCruOpps static files ready"
+    staticPublishPath: ./public
+    previews:
+      generation: automatic
+    routes:
+      - type: rewrite
+        source: /opportunities
+        destination: /index.html
+      - type: rewrite
+        source: /apply
+        destination: /index.html
+      - type: rewrite
+        source: /sign-in
+        destination: /index.html
+      - type: rewrite
+        source: /staff
+        destination: /index.html
+      - type: rewrite
+        source: /assignment
+        destination: /index.html
+      - type: rewrite
+        source: /assignments
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Content-Security-Policy
+        value: "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://*.supabase.co; form-action 'self'; base-uri 'self'; frame-ancestors 'none'"
+
