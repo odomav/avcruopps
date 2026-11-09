@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 30" role="img" aria-label="AVCruOpps crew mark">
+  <rect width="30" height="30" fill="#111111"/>
+  <circle cx="7" cy="8" r="2.2" fill="#00bfe8"/><circle cx="15" cy="6" r="2.2" fill="#00bfe8"/><circle cx="23" cy="8" r="2.2" fill="#ffffff"/>
+  <path d="M3.5 23v-7.2c0-2.2 1.4-3.8 3.5-3.8s3.5 1.6 3.5 3.8V23z" fill="#00bfe8"/>
+  <path d="M11.5 23V13.8c0-2.2 1.4-3.8 3.5-3.8s3.5 1.6 3.5 3.8V23z" fill="#00bfe8"/>
+  <path d="M19.5 23v-7.2c0-2.2 1.4-3.8 3.5-3.8s3.5 1.6 3.5 3.8V23z" fill="#ffffff"/>
+</svg>
