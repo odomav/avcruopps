@@ -34,30 +34,39 @@ export async function renderApplication({me,shell,cfg,db,esc}){
       <div class="grid"><div class="field"><label for="city">City or county *</label><input id="city" type="text" maxlength="120" required></div>
       <div class="field"><label for="state">State *</label><input id="state" type="text" maxlength="80" required></div></div>
       <div class="field"><label for="specialties">Specialties and relevant experience</label><textarea id="specialties" maxlength="3000" placeholder="Tell us about the systems, roles, and projects you know best."></textarea></div>
-      <div class="field"><label for="resume">Résumé (PDF, up to 5 MB) *</label><input id="resume" type="file" accept=".pdf,application/pdf" required></div>
+      <fieldset><legend>Application PDFs — up to five files</legend><p class="hint">A PDF résumé is required. You may also add certifications, a portfolio, professional references, or other relevant PDFs. Select a type for each file.</p><div id="application-documents"><div class="application-document-row"><div class="grid"><div class="field"><label>Document type *</label><select name="document-type" required><option value="resume">Résumé</option></select></div><div class="field"><label>PDF, up to 5 MB *</label><input name="document-file" type="file" accept=".pdf,application/pdf" required></div></div></div></div><button type="button" class="secondary" id="add-document">Add another PDF</button></fieldset>
       <fieldset><legend>Professional references — at least three, up to five *</legend><p class="hint">For each person, include their name, relationship to you, email, and phone number.</p><div id="references"></div>
       <button type="button" class="secondary" id="add-reference">Add another reference</button></fieldset>
       <div class="application-notice"><strong>How we use your information</strong><p>Odom Audio Visual uses your application and résumé to evaluate roster eligibility, contact you and your references, and manage future assignments. We retain applicant records for business and legal purposes and may transfer them as part of a sale or reorganization of the business. We do not sell applicant records separately. You may contact <a href="mailto:admin@odomav.com">admin@odomav.com</a> about your information. Applying does not guarantee an assignment or determine whether a future engagement is employment or independent contract work.</p></div>
       <label class="consent"><input id="privacy" type="checkbox" required> I have read the information notice and confirm that I may provide these references' contact information. *</label>
       <div class="form-actions"><button id="send-application" type="submit">Submit Application</button><span id="application-message" aria-live="polite"></span></div>
     </div></form>`);
+  const docs=document.getElementById("application-documents");
+  document.getElementById("add-document").onclick=()=>{if(docs.children.length>=5)return;const row=document.createElement("div");row.className="application-document-row";row.innerHTML=`<div class="grid"><div class="field"><label>Document type *</label><select name="document-type" required><option value="">Select type</option><option value="certification">Certification</option><option value="portfolio">Portfolio</option><option value="references">Professional references</option><option value="other">Other PDF</option></select></div><div class="field"><label>PDF, up to 5 MB *</label><input name="document-file" type="file" accept=".pdf,application/pdf" required></div></div><button type="button" class="secondary remove-document">Remove PDF</button>`;row.querySelector(".remove-document").onclick=()=>{row.remove();document.getElementById("add-document").disabled=false};docs.append(row);document.getElementById("add-document").disabled=docs.children.length>=5};
   const refs=document.getElementById("references");
   const addReference=()=>{if(refs.children.length>=5)return;const n=refs.children.length+1;const row=document.createElement("div");row.className="reference-row";row.innerHTML=`<h3>Reference ${n}</h3><div class="grid"><div class="field"><label>Name *</label><input name="ref-name" type="text" maxlength="255" required></div><div class="field"><label>Relationship *</label><input name="ref-relationship" type="text" maxlength="255" required></div><div class="field"><label>Email *</label><input name="ref-email" type="email" required></div><div class="field"><label>Phone *</label><input name="ref-phone" type="tel" maxlength="40" required></div></div>`;refs.append(row);document.getElementById("add-reference").disabled=refs.children.length>=5};
   for(let i=0;i<3;i++)addReference();document.getElementById("add-reference").onclick=addReference;
   document.getElementById("crew-application").addEventListener("submit",async e=>{
-    e.preventDefault();const button=document.getElementById("send-application"),message=document.getElementById("application-message"),file=document.getElementById("resume").files[0];
-    if(!file||file.size>5242880||file.size<8){message.textContent="Choose a PDF résumé under 5 MB.";return;}
-    const signature=new TextDecoder().decode(await file.slice(0,5).arrayBuffer());if(signature!=="%PDF-"){message.textContent="The résumé must be a valid PDF.";return;}
+    e.preventDefault();const button=document.getElementById("send-application"),message=document.getElementById("application-message");
+    const files=[...docs.children].map(row=>({type:row.querySelector('[name="document-type"]').value,file:row.querySelector('[name="document-file"]').files[0]}));
+    if(files.length<1||files.length>5||files[0].type!=="resume"){message.textContent="Add a PDF résumé and up to four other PDFs.";return;}
+    for(const item of files){if(!item.type||!item.file||item.file.size>5242880||item.file.size<8||new TextDecoder().decode(await item.file.slice(0,5).arrayBuffer())!=="%PDF-"){message.textContent="Each file must be a valid PDF under 5 MB with a selected type.";return;}}
     const references=[...refs.children].map(row=>({name:row.querySelector('[name="ref-name"]').value.trim(),relationship:row.querySelector('[name="ref-relationship"]').value.trim(),email:row.querySelector('[name="ref-email"]').value.trim(),phone:row.querySelector('[name="ref-phone"]').value.trim()}));
     if(references.length<3||references.some(r=>Object.values(r).some(v=>!v))){message.textContent="Complete at least three references.";return;}
-    button.disabled=true;message.textContent="Uploading résumé…";
-    const path=`${me.user.id}/${crypto.randomUUID()}.pdf`;
+    button.disabled=true;message.textContent="Uploading PDFs…";
+    const uploadedFiles=[];
     try{
       const raw=JSON.parse(localStorage.getItem(`sb-${new URL(cfg.supabaseUrl).hostname.split(".")[0]}-auth-token`));
-      const uploaded=await fetch(`${cfg.supabaseUrl}/storage/v1/object/freelancer-resumes/${path}`,{method:"POST",headers:{apikey:cfg.publishableKey,Authorization:`Bearer ${raw.access_token}`,"Content-Type":"application/pdf","x-upsert":"false"},body:file});
-      if(!uploaded.ok){const error=await uploaded.json().catch(()=>({}));throw new Error(error.message||`Résumé upload failed (${uploaded.status})`)}
+      for(const item of files){const bucket=item.type==="resume"?"freelancer-resumes":"freelancer-documents",path=`${me.user.id}/${crypto.randomUUID()}.pdf`;
+        const uploaded=await fetch(`${cfg.supabaseUrl}/storage/v1/object/${bucket}/${path}`,{method:"POST",headers:{apikey:cfg.publishableKey,Authorization:`Bearer ${raw.access_token}`,"Content-Type":"application/pdf","x-upsert":"false"},body:item.file});
+        if(!uploaded.ok){const error=await uploaded.json().catch(()=>({}));throw new Error(error.message||`PDF upload failed (${uploaded.status})`)}
+        uploadedFiles.push({...item,bucket,path});
+      }
       message.textContent="Saving application…";
-      await db("freelancer_applications","",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({applicant_id:me.user.id,full_name:document.getElementById("full-name").value.trim(),email:me.user.email.toLowerCase(),phone:document.getElementById("phone").value.trim(),home_city:document.getElementById("city").value.trim(),home_state:document.getElementById("state").value.trim(),primary_region:document.getElementById("zone").value,role_code:document.querySelector('[name="role"]:checked').value,specialties:document.getElementById("specialties").value.trim(),resume_path:path,professional_references:references})});
+      await db("freelancer_applications","",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({applicant_id:me.user.id,full_name:document.getElementById("full-name").value.trim(),email:me.user.email.toLowerCase(),phone:document.getElementById("phone").value.trim(),home_city:document.getElementById("city").value.trim(),home_state:document.getElementById("state").value.trim(),primary_region:document.getElementById("zone").value,role_code:document.querySelector('[name="role"]:checked').value,specialties:document.getElementById("specialties").value.trim(),resume_path:uploadedFiles[0].path,professional_references:references})});
+      const saved=await db("freelancer_application_self","select=id");
+      if(!saved?.[0]?.id)throw new Error("Application saved, but the PDF list could not be linked. Please contact OAV.");
+      await db("freelancer_application_documents","",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify(uploadedFiles.map(item=>({application_id:saved[0].id,document_type:item.type,file_name:item.file.name,storage_bucket:item.bucket,storage_path:item.path,source:"avcruopps"})))});
       location.reload();
     }catch(error){message.textContent=error.message;button.disabled=false;}
   });
