@@ -8,18 +8,34 @@ const roles=[
 ];
 const zones=[["NE","Northeast"],["SC","South Central"],["SE","Southeast"],["NC","North Central"],["WE","West"]];
 
-export async function renderApplication({me,shell,cfg,db,esc}){
-  if(!me.user){
-    shell("Apply to Join",`<h1 class="page-title">Apply to Join the OAV Freelance Roster</h1>
-      <p>Odom Audio Visual is based in Ulster County, New York, and Bossier Parish, Louisiana. We work with crew across multiple regions.</p>
-      <section class="box"><h2>Start your application</h2><div class="box-b">
-      <p>Create a sign-in, then complete the application here on AVCruOpps. OAV reviews each application before granting roster access.</p>
-      <p><a class="button" href="/sign-in?next=/apply">Create Account or Sign In</a></p>
-      </div></section>`);return;
+export async function renderApplication({me,shell,cfg,db,esc,req,tokenKey}){
+  const existing=me.user?await db("freelancer_application_self","select=*"):[];
+  if(existing.length && me.user?.is_anonymous){
+    const a=existing[0];
+    shell("Finish Your Account",`<h1 class="page-title">Application Submitted</h1>
+      <div class="msg ok">Your application for <strong>${esc(roles.find(r=>r[0]===a.role_code)?.[1]||a.role_code)}</strong> is saved. Finish creating your account to follow its status.</div>
+      <section class="box"><h2>Final Step: Create Your Account</h2><div class="box-b">
+      <p>We will email a verification link to the address on your application. Open it on this device to set your password.</p>
+      <div class="form-actions"><button type="button" id="verify-application-email">Send Verification Email</button><span id="registration-message" aria-live="polite"></span></div>
+      </div></section>`);
+    document.getElementById("verify-application-email").onclick=async()=>{
+      const button=document.getElementById("verify-application-email"),message=document.getElementById("registration-message");
+      button.disabled=true;message.textContent="Sending verification email…";
+      try{
+        const rows=await db("freelancer_application_email_self","select=email");
+        const email=rows?.[0]?.email;
+        if(!email)throw new Error("Application email could not be found. Please contact OAV.");
+        await req(`/auth/v1/user?redirect_to=${encodeURIComponent(`${location.origin}/sign-in`)}`,{method:"PUT",body:JSON.stringify({email})});
+        message.textContent=`Check ${email} for the verification link. Your application is already saved.`;
+      }catch(error){message.textContent=error.message;button.disabled=false;}
+    };return;
   }
-  const previous=await db("freelancer_application_self","select=*");
-  if(previous.length){
-    const a=previous[0];shell("Application Received",`<h1 class="page-title">Application Received</h1>
+  if(existing.length && new URLSearchParams(location.search).get("step")==="finish"){
+    shell("Set Your Password",`<h1 class="page-title">Finish Your Account</h1><form id="finish-account" class="box"><h2>Set a Password</h2><div class="box-b"><p>Your email is verified and your application is saved.</p><div class="field"><label for="new-password">Password</label><input id="new-password" type="password" autocomplete="new-password" minlength="8" required></div><div class="field"><label for="confirm-password">Confirm password</label><input id="confirm-password" type="password" autocomplete="new-password" minlength="8" required></div><div class="form-actions"><button type="submit">Finish Account</button><span id="registration-message" aria-live="polite"></span></div></div></form>`);
+    document.getElementById("finish-account").onsubmit=async e=>{e.preventDefault();const password=document.getElementById("new-password").value,message=document.getElementById("registration-message");if(password!==document.getElementById("confirm-password").value){message.textContent="Passwords do not match.";return;}try{await req("/auth/v1/user",{method:"PUT",body:JSON.stringify({password})});location.replace("/apply")}catch(error){message.textContent=error.message}};return;
+  }
+  if(existing.length){
+    const a=existing[0];shell("Application Received",`<h1 class="page-title">Application Received</h1>
       <div class="msg ok">Your application for <strong>${esc(roles.find(r=>r[0]===a.role_code)?.[1]||a.role_code)}</strong> was received on ${esc(new Date(a.applied_at).toLocaleDateString("en-US",{timeZone:"America/New_York"}))}.</div>
       <p>Current review status: <strong>${esc(a.status.replaceAll("_"," "))}</strong>. OAV will contact you using the details you submitted.</p>`);return;
   }
@@ -31,7 +47,7 @@ export async function renderApplication({me,shell,cfg,db,esc}){
       ${roles.map(([code,name])=>`<label><input type="radio" name="role" value="${code}" required><span>${esc(name)}</span></label>`).join("")}</fieldset>
       <div class="grid"><div class="field"><label for="full-name">Full name *</label><input id="full-name" type="text" autocomplete="name" maxlength="255" required></div>
       <div class="field"><label for="phone">Phone *</label><input id="phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="+1 (845) 555-0123" maxlength="22" required></div></div>
-      <div class="grid"><div class="field"><label for="email">Account email</label><input id="email" type="email" value="${esc(me.user.email)}" readonly></div>
+      <div class="grid"><div class="field"><label for="email">Email *</label><input id="email" type="email" autocomplete="email" maxlength="255" value="${esc(me.user?.email||"")}" ${me.user&&!me.user.is_anonymous?"readonly":"required"}></div>
       <div class="field"><label for="zone">Primary region *</label><select id="zone" required><option value="">Select region</option>${zones.map(([code,name])=>`<option value="${code}">${name}</option>`).join("")}</select></div></div>
       <div class="grid"><div class="field"><label for="city">City *</label><input id="city" type="text" maxlength="120" required></div>
       <div class="field"><label for="state">State *</label><select id="state" required><option value="">Select state</option><option value="AL">Alabama (AL)</option><option value="AK">Alaska (AK)</option><option value="AZ">Arizona (AZ)</option><option value="AR">Arkansas (AR)</option><option value="CA">California (CA)</option><option value="CO">Colorado (CO)</option><option value="CT">Connecticut (CT)</option><option value="DE">Delaware (DE)</option><option value="FL">Florida (FL)</option><option value="GA">Georgia (GA)</option><option value="HI">Hawaii (HI)</option><option value="ID">Idaho (ID)</option><option value="IL">Illinois (IL)</option><option value="IN">Indiana (IN)</option><option value="IA">Iowa (IA)</option><option value="KS">Kansas (KS)</option><option value="KY">Kentucky (KY)</option><option value="LA">Louisiana (LA)</option><option value="ME">Maine (ME)</option><option value="MD">Maryland (MD)</option><option value="MA">Massachusetts (MA)</option><option value="MI">Michigan (MI)</option><option value="MN">Minnesota (MN)</option><option value="MS">Mississippi (MS)</option><option value="MO">Missouri (MO)</option><option value="MT">Montana (MT)</option><option value="NE">Nebraska (NE)</option><option value="NV">Nevada (NV)</option><option value="NH">New Hampshire (NH)</option><option value="NJ">New Jersey (NJ)</option><option value="NM">New Mexico (NM)</option><option value="NY">New York (NY)</option><option value="NC">North Carolina (NC)</option><option value="ND">North Dakota (ND)</option><option value="OH">Ohio (OH)</option><option value="OK">Oklahoma (OK)</option><option value="OR">Oregon (OR)</option><option value="PA">Pennsylvania (PA)</option><option value="RI">Rhode Island (RI)</option><option value="SC">South Carolina (SC)</option><option value="SD">South Dakota (SD)</option><option value="TN">Tennessee (TN)</option><option value="TX">Texas (TX)</option><option value="UT">Utah (UT)</option><option value="VT">Vermont (VT)</option><option value="VA">Virginia (VA)</option><option value="WA">Washington (WA)</option><option value="WV">West Virginia (WV)</option><option value="WI">Wisconsin (WI)</option><option value="WY">Wyoming (WY)</option><option value="DC">District of Columbia (DC)</option></select></div></div>
@@ -58,17 +74,20 @@ export async function renderApplication({me,shell,cfg,db,esc}){
     for(const item of files){if(!item.type||!item.file||item.file.size>5242880||item.file.size<8||new TextDecoder().decode(await item.file.slice(0,5).arrayBuffer())!=="%PDF-"){message.textContent="Each file must be a valid PDF under 5 MB with a selected type.";return;}}
     const references=[...refs.children].map(row=>({name:row.querySelector('[name="ref-name"]').value.trim(),relationship:row.querySelector('[name="ref-relationship"]').value.trim(),email:row.querySelector('[name="ref-email"]').value.trim(),phone:row.querySelector('[name="ref-phone"]').value.trim()}));
     if(references.length<3||references.some(r=>Object.values(r).some(v=>!v))){message.textContent="Complete at least three references.";return;}
-    button.disabled=true;message.textContent="Uploading PDFs…";
+    button.disabled=true;message.textContent="Submitting application…";
     const uploadedFiles=[];
     try{
-      const raw=JSON.parse(localStorage.getItem(`sb-${new URL(cfg.supabaseUrl).hostname.split(".")[0]}-auth-token`));
-      for(const item of files){const bucket=item.type==="resume"?"freelancer-resumes":"freelancer-documents",path=`${me.user.id}/${crypto.randomUUID()}.pdf`;
+      const email=document.getElementById("email").value.trim().toLowerCase();
+      let applicant=me.user;
+      if(!applicant){const data=await req("/auth/v1/signup",{method:"POST",body:JSON.stringify({data:{}})},false);if(!data?.access_token||!data?.user?.id)throw new Error("The application could not be started. Please try again.");localStorage.setItem(tokenKey,JSON.stringify(data));applicant=data.user;}
+      const raw=JSON.parse(localStorage.getItem(tokenKey));
+      for(const item of files){const bucket=item.type==="resume"?"freelancer-resumes":"freelancer-documents",path=`${applicant.id}/${crypto.randomUUID()}.pdf`;
         const uploaded=await fetch(`${cfg.supabaseUrl}/storage/v1/object/${bucket}/${path}`,{method:"POST",headers:{apikey:cfg.publishableKey,Authorization:`Bearer ${raw.access_token}`,"Content-Type":"application/pdf","x-upsert":"false"},body:item.file});
         if(!uploaded.ok){const error=await uploaded.json().catch(()=>({}));throw new Error(error.message||`PDF upload failed (${uploaded.status})`)}
         uploadedFiles.push({...item,bucket,path});
       }
       message.textContent="Saving application…";
-      await db("freelancer_applications","",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({applicant_id:me.user.id,full_name:document.getElementById("full-name").value.trim(),email:me.user.email.toLowerCase(),phone:document.getElementById("phone").value.trim(),home_city:document.getElementById("city").value.trim(),home_state:document.getElementById("state").value.trim(),primary_region:document.getElementById("zone").value,role_code:document.querySelector('[name="role"]:checked').value,specialties:document.getElementById("specialties").value.trim(),resume_path:uploadedFiles[0].path,professional_references:references})});
+      await db("freelancer_applications","",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify({applicant_id:applicant.id,full_name:document.getElementById("full-name").value.trim(),email,phone:document.getElementById("phone").value.trim(),home_city:document.getElementById("city").value.trim(),home_state:document.getElementById("state").value.trim(),primary_region:document.getElementById("zone").value,role_code:document.querySelector('[name="role"]:checked').value,specialties:document.getElementById("specialties").value.trim(),resume_path:uploadedFiles[0].path,professional_references:references})});
       const saved=await db("freelancer_application_self","select=id");
       if(!saved?.[0]?.id)throw new Error("Application saved, but the PDF list could not be linked. Please contact OAV.");
       await db("freelancer_application_documents","",{method:"POST",headers:{Prefer:"return=minimal"},body:JSON.stringify(uploadedFiles.map(item=>({application_id:saved[0].id,document_type:item.type,file_name:item.file.name,storage_bucket:item.bucket,storage_path:item.path,source:"avcruopps"})))});
