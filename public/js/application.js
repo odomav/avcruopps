@@ -9,6 +9,10 @@ const roles=[
 const zones=[["NE","Northeast"],["SC","South Central"],["SE","Southeast"],["NC","North Central"],["WE","West"]];
 
 export async function renderApplication({me,shell,cfg,db,esc,req,tokenKey}){
+  if(!me.user){
+    shell('Odom AV account',`<h1 class="page-title">Create your Odom AV account first</h1><section class="box"><h2>Freelancer application</h2><div class="box-b"><p>Sign in or create your account on Odom AV. You can choose freelancer alongside client or subcontractor, then return here to submit your crew application.</p><p><a class="button" href="https://odomav-site-preview.onrender.com/account/">Open Odom AV account</a></p></div></section>`);
+    return;
+  }
   const existing=me.user?await db("freelancer_application_self","select=*"):[];
   if(existing.length && me.user?.is_anonymous){
     const a=existing[0];
